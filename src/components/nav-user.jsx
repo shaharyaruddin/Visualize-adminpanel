@@ -45,7 +45,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import Cookies from "js-cookie";
-import { logoutEndPoint } from "../../constraint/api/auth.route"; // e.g., "http://localhost:5000/api/logout"
 
 export function NavUser({ user }) {
   const { isMobile } = useSidebar();

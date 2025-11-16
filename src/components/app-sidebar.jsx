@@ -9,7 +9,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { Book, Gauge, SquareKanban, Tag, Users } from "lucide-react";
+import { Gauge, Tag } from "lucide-react";
 
 export function AppSidebar({ ...props }) {
   const [user, setUser] = React.useState({});

@@ -29,8 +29,11 @@ const Portfolio = () => {
   const fetchPortfolioList = async () => {
     try {
       const response = await axios.get(
-        "http://localhost:1000/portfolio/portfolioLists"
+        `${process.env.NEXT_PUBLIC_API_BASE_URI}/portfolio/portfolioLists`
       );
+
+      console.log("potfilio>>>>>>>>>>>>>>>", response?.data);
+
       setPortfolioList(response?.data?.PorfolioList);
     } catch (error) {
       console.log("error fetching in portfolio", err);
@@ -38,9 +41,7 @@ const Portfolio = () => {
   };
 
   useEffect(() => {
-    if (portfolioList) {
-      fetchPortfolioList();
-    }
+    fetchPortfolioList();
   }, []);
 
   const handleDelete = async () => {

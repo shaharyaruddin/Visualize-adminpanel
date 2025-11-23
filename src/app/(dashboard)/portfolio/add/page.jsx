@@ -66,7 +66,7 @@ const AddCategory = () => {
       formData.append("_id", id);
       if (id) {
         const response = await axios.put(
-          "http://localhost:1000/portfolio/updatePortfolio",
+          `${NEXT_PUBLIC_API_BASE_URI}/portfolio/updatePortfolio`,
           formData,
           {
             headers: {
@@ -77,7 +77,7 @@ const AddCategory = () => {
         toast.success("Portfolio Update Successfully");
       } else {
         const response = await axios.post(
-          "http://localhost:1000/portfolio/addportfolio",
+          `${NEXT_PUBLIC_API_BASE_URI}/portfolio/addportfolio`,
           formData,
           {
             headers: {

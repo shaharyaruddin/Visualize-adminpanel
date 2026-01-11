@@ -1,9 +1,13 @@
 "use client";
-import React, { useReducer, useEffect, useState } from "react";
+
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import axios from "axios";
+import { useRouter, useSearchParams } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -15,11 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import axios from "axios";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { fetchReducer } from "@/app/(api-response)/reducer/FetchReducer";
-import { FETCH_INITIAL_STATE } from "@/app/(api-response)/states/FetchInitialState";
 import {
   Select,
   SelectContent,
@@ -28,9 +28,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/* ---------------- SCHEMA ---------------- */
 const formSchema = z.object({
   name: z.string().min(1, "Title is required"),
-  category: z.string().min(1, "Category is required"),
+  category: z.string().min(1, "Category is required"), // stores category _id
   description: z.string().min(5, "Description is required"),
   image: z.any().optional(),
 });
@@ -40,106 +41,99 @@ const AddCategory = () => {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
 
-  console.log("check id>>>", id);
-  const [state, dispatch] = useReducer(fetchReducer, FETCH_INITIAL_STATE);
   const [categoryList, setCategoryList] = useState([]);
-  const [portfolioData, setPortfolioData] = useState([]);
+  const [portfolioList, setPortfolioList] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // prevents reset loop in edit mode
+  const hasPrefilled = useRef(false);
 
   const form = useForm({
     resolver: zodResolver(formSchema),
-    mode: "onChange",
     defaultValues: {
       name: "",
-      category: "",
+      category: "", // category _id
       description: "",
       image: null,
     },
   });
 
-  async function onSubmit(values) {
+  /* ---------------- FETCH CATEGORY + PORTFOLIO LIST ---------------- */
+  const fetchInitialData = async () => {
+    try {
+      const [categoryRes, portfolioRes] = await Promise.all([
+        axios.get(
+          `${process.env.NEXT_PUBLIC_API_BASE_URI}/category`
+        ),
+        axios.get(
+          `${process.env.NEXT_PUBLIC_API_BASE_URI}/portfolio/portfolioLists`
+        ),
+      ]);
+
+      setCategoryList(categoryRes.data.allCategories || []);
+      setPortfolioList(portfolioRes.data.PorfolioList || []);
+    } catch (error) {
+      console.error("Fetch error", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  /* ---------------- PREFILL FORM (EDIT MODE – RUN ONCE) ---------------- */
+  useEffect(() => {
+    if (!id || portfolioList.length === 0 || hasPrefilled.current) return;
+
+    const portfolio = portfolioList.find(
+      (item) => item?._id === id
+    );
+
+    if (portfolio) {
+      form.reset({
+        name: portfolio.name || "",
+        category: portfolio?.category || "",
+        description: portfolio.description || "",
+        image: null, // never prefill file input
+      });
+
+      hasPrefilled.current = true;
+    }
+  }, [id, portfolioList, form]);
+
+  /* ---------------- SUBMIT ---------------- */
+  const onSubmit = async (values) => {
+    setLoading(true);
     try {
       const formData = new FormData();
       formData.append("name", values.name);
-      formData.append("category", values.category);
+      formData.append("category", values.category); // send category _id
       formData.append("description", values.description);
-      formData.append("image", values.image);
-      formData.append("_id", id);
+      if (values.image) formData.append("image", values.image);
+
       if (id) {
-        const response = await axios.put(
-          `${NEXT_PUBLIC_API_BASE_URI}/portfolio/updatePortfolio`,
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
+        formData.append("_id", id);
+        await axios.put(
+          `${process.env.NEXT_PUBLIC_API_BASE_URI}/portfolio/updatePortfolio`,
+          formData
         );
-        toast.success("Portfolio Update Successfully");
+        toast.success("Portfolio updated successfully");
       } else {
-        const response = await axios.post(
-          `${NEXT_PUBLIC_API_BASE_URI}/portfolio/addportfolio`,
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
+        await axios.post(
+          `${process.env.NEXT_PUBLIC_API_BASE_URI}/portfolio/addportfolio`,
+          formData
         );
-        toast.success("Portfolio Added Successfully");
+        toast.success("Portfolio added successfully");
       }
+
       router.push("/portfolio");
     } catch (error) {
-      console.log("error while adding portfolio", error);
-    }
-  }
-
-  const fetchPortfolioList = async () => {
-    try {
-      const response = await axios.get(
-        "http://localhost:1000/portfolio/portfolioLists"
-      );
-      setPortfolioData(response?.data?.PorfolioList);
-    } catch (error) {
-      console.log("error fetching in portfolio", err);
+      console.error("Submit error", error);
+      toast.error("Something went wrong");
+    } finally {
+      setLoading(false);
     }
   };
-
-  const fetchCategoryList = async () => {
-    try {
-      const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_BASE_URI}/category`
-      );
-      setCategoryList(response.data.allCategories);
-    } catch (error) {
-      console.log("error fetching in portfolio", err);
-    }
-  };
-
-  useEffect(() => {
-    fetchCategoryList();
-    fetchPortfolioList();
-  }, []);
-
-  useEffect(() => {
-    if (id) {
-      fetchPortfolioList();
-    }
-  }, [id]);
-
-  const isLoading = !state.LOADING;
-
-  const findPortfolioById = portfolioData?.find((item) => item?._id === id);
-
-  useEffect(() => {
-    if (findPortfolioById) {
-      form.reset({
-        name: findPortfolioById.name || "",
-        category: findPortfolioById?.categoryDetail?.categoryName || "",
-        description: findPortfolioById.description || "",
-        image: findPortfolioById.image || null,
-      });
-    }
-  }, [findPortfolioById, form]);
 
   return (
     <div className="max-w-3xl mx-auto py-10">
@@ -147,20 +141,15 @@ const AddCategory = () => {
         <CardHeader>
           <CardTitle>{id ? "Edit" : "Add"} Portfolio</CardTitle>
         </CardHeader>
+
         <CardContent>
           <Form {...form}>
             <form
-              onSubmit={form.handleSubmit((values, event) =>
-                onSubmit(values, event)
-              )}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                }
-              }}
+              onSubmit={form.handleSubmit(onSubmit)}
               className="space-y-6"
               autoComplete="off"
             >
+              {/* TITLE */}
               <FormField
                 control={form.control}
                 name="name"
@@ -168,51 +157,46 @@ const AddCategory = () => {
                   <FormItem>
                     <FormLabel>Title</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="Enter title"
-                        type="text"
-                        {...field}
-                        disabled={isLoading}
-                        autoComplete="off"
-                      />
+                      <Input placeholder="Enter title" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
+              {/* CATEGORY */}
               <FormField
                 control={form.control}
                 name="category"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
-                    <FormItem>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select a category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {categoryList.map((item, index) => (
-                            <SelectItem key={index} value={item.categoryName}>
-                              {item.categoryName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categoryList.map((item) => (
+                          <SelectItem
+                            key={item._id}
+                            value={item.categoryName}
+                          >
+                            {item.categoryName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
+              {/* DESCRIPTION */}
               <FormField
                 control={form.control}
                 name="description"
@@ -221,17 +205,16 @@ const AddCategory = () => {
                     <FormLabel>Description</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Enter category description"
-                        aria-describedby="description-error"
+                        placeholder="Enter description"
                         {...field}
-                        disabled={isLoading}
-                        autoComplete="off"
                       />
                     </FormControl>
-                    <FormMessage id="description-error" />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {/* IMAGE */}
               <FormField
                 control={form.control}
                 name="image"
@@ -242,8 +225,9 @@ const AddCategory = () => {
                       <Input
                         type="file"
                         accept="image/*"
-                        className="cursor-pointer"
-                        onChange={(e) => field.onChange(e.target.files?.[0])}
+                        onChange={(e) =>
+                          field.onChange(e.target.files?.[0])
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -251,24 +235,20 @@ const AddCategory = () => {
                 )}
               />
 
-              <div className="flex gap-2">
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="cursor-pointer"
-                >
-                  {isLoading ? (
-                    <>Processing...</>
-                  ) : (
-                    `${id ? "Update" : "Add "} Portfolio`
-                  )}
+              {/* BUTTONS */}
+              <div className="flex gap-3">
+                <Button type="submit" disabled={loading}>
+                  {loading
+                    ? "Processing..."
+                    : id
+                    ? "Update Portfolio"
+                    : "Add Portfolio"}
                 </Button>
+
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.push("/portfolio")}
-                  disabled={isLoading}
-                  className="cursor-pointer"
                 >
                   Cancel
                 </Button>

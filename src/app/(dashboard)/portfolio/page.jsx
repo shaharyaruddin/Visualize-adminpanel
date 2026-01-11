@@ -47,7 +47,7 @@ const Portfolio = () => {
   const handleDelete = async () => {
     try {
       const payload = {
-        _id: id,
+        Id: id,
       };
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_API_BASE_URI}/portfolio/deletePortfolio`,

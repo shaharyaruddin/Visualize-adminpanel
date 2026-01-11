@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -83,7 +83,9 @@ const AddBlogs = () => {
       if (id) {
         try {
           setIsLoading(true);
-          const response = await axios.get("http://localhost:1000/blogs");
+          const response = await axios.get(
+            `${process.env.NEXT_PUBLIC_API_BASE_URI}/blogs`
+          );
           setBlogs(response.data.AllBlogs);
           // console.log(response.data.AllBlogs, "blogs---------------");
         } catch (error) {
@@ -97,8 +99,12 @@ const AddBlogs = () => {
     fetchBlogsList();
   }, [id]);
 
+  const hasPrefilled = useRef(false);
+
   // Autofill form when blog data is fetched
   useEffect(() => {
+    if (!id || blogs.length === 0 || hasPrefilled.current) return;
+
     const findBlogById = blogs.find((item) => item?._id === id);
     if (findBlogById) {
       form.reset({
@@ -106,55 +112,60 @@ const AddBlogs = () => {
         categoryName: findBlogById?.categoryName || "",
         description: findBlogById.description || "",
         long_description: findBlogById.long_description || "",
-        image: findBlogById?.image || null, 
+        image: null, // never prefill file input
         publishedDate: findBlogById.publishedDate
           ? new Date(findBlogById.publishedDate).toISOString().split("T")[0]
           : "",
       });
+
+      hasPrefilled.current = true; // ✅ prevents future resets
     }
   }, [blogs, id, form]);
 
   // Handle form submission
-async function onSubmit(values) {
-  try {
-    if (id && !blogs.find((item) => item?._id === id)) {
-      toast.error("Invalid blog ID");
-      return;
-    }
-    setIsLoading(true);
-    const formData = new FormData();
-    formData.append("title", values.title);
-    formData.append("categoryName", values.categoryName);
-    formData.append("publishedDate", values.publishedDate);
-    formData.append("description", values.description);
-    formData.append("long_description", values.long_description);
-    if (values.image) formData.append("image", values.image);
-    if (id) formData.append("_id", id);
+  async function onSubmit(values) {
+    try {
+      if (id && !blogs.find((item) => item?._id === id)) {
+        toast.error("Invalid blog ID");
+        return;
+      }
+      setIsLoading(true);
+      const formData = new FormData();
+      formData.append("title", values.title);
+      formData.append("categoryName", values.categoryName);
+      formData.append("publishedDate", values.publishedDate);
+      formData.append("description", values.description);
+      formData.append("long_description", values.long_description);
+      if (values.image) formData.append("image", values.image);
+      if (id) formData.append("_id", id);
 
-    // Debug FormData
-    console.log("FormData entries:", [...formData.entries()]);
+      // Debug FormData
+      console.log("FormData entries:", [...formData.entries()]);
 
-    if (id) {
-      await axios.put(
-        `${process.env.NEXT_PUBLIC_API_BASE_URI}/blogs/update`,
-        formData
+      if (id) {
+        await axios.put(
+          `${process.env.NEXT_PUBLIC_API_BASE_URI}/blogs/update`,
+          formData
+        );
+        toast.success("Blog updated successfully!");
+      } else {
+        await axios.post(
+          `${process.env.NEXT_PUBLIC_API_BASE_URI}/blogs/add`,
+          formData
+        );
+        toast.success("Blog added successfully!");
+      }
+      router.push("/blogs");
+    } catch (error) {
+      console.error(
+        "Error while adding/updating blog:",
+        error.response?.data || error.message
       );
-      toast.success("Blog updated successfully!");
-    } else {
-      await axios.post(
-        `${process.env.NEXT_PUBLIC_API_BASE_URI}/blogs/add`,
-        formData
-      );
-      toast.success("Blog added successfully!");
+      toast.error(error.response?.data?.message || "Failed to process blog");
+    } finally {
+      setIsLoading(false);
     }
-    router.push("/blogs");
-  } catch (error) {
-    console.error("Error while adding/updating blog:", error.response?.data || error.message);
-    toast.error(error.response?.data?.message || "Failed to process blog");
-  } finally {
-    setIsLoading(false);
   }
-}
 
   return (
     <div className="max-w-3xl mx-auto py-10">
